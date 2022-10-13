@@ -1,0 +1,250 @@
+---
+title: "HCA Africa scRNA-Seq workshop | Preprocessing and QC Lab"
+author: "Daniel Chafamo"
+date: "10/19/2022"
+output: html_document
+---
+
+Tutorial adopted from https://satijalab.org/seurat/articles/pbmc3k_tutorial.html
+
+### Load external libraries
+
+```{r}
+library(dplyr)
+library(Seurat)
+library(patchwork)
+```
+
+
+### Read in raw counts and metadata
+We start by reading in the data. R's readRDS (https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/readRDS)
+function loads an R object that was previously saved. Here we will read in a counts table and a metadata table
+
+The rows correspond to genes and the columns correspond to cells (barcodes)
+The values represent the number of molecules for each gene (row) that are detected in each cell (column)
+
+```{r}
+
+# TODO: change this to your home directory
+home.dir <- "/home1/scw01/"
+
+counts <- readRDS(paste0(home.dir, "/20210220_NasalSwab_RawCounts_filtered.rds"))
+
+# View the first 3 genes by 3 cells elements of the counts table
+counts[1:3,1:3]
+```
+
+Read in the metadata table from "data/20210701_NasalSwab_MetaData_filtered.rds"
+```{r}
+metadata <- readRDS(paste0(home.dir, "20210701_NasalSwab_MetaData_filtered.rds"))
+
+# View the first few elements of the metadata table
+t(head(metadata))
+```
+
+### Create the Seurat Object
+
+We next use the count matrix and metadata to create a Seurat object. The object serves as a container that contains both the
+raw counts and metadata and downstream analysis (like PCA, or clustering results) for a single-cell dataset.
+
+```{r}
+
+seurat.raw <- CreateSeuratObject(
+    counts = counts,
+    meta.data = metadata,
+    project = "hca_covid19",
+    min.cells = 0,
+    min.features = 0
+)
+seurat.raw
+```
+
+### Exploring the Seurat Object
+
+The first step of analysis is to gain familiarity with the dataset.
+Seurat allows us to explore our count data in conjunction with the associated metadata.
+
+```{r}
+# How many cells and genes do we currently have?
+print(paste0("The number of genes is ", dim(seurat.raw)[1], " and the number of cells is ", dim(seurat.raw)[2]))
+```
+
+```{r}
+# View a slice of the count data
+GetAssayData(seurat.raw, slot = "counts")[8:10,13:14]
+```
+
+NOTE: the dots('.') reflect a zero value.
+The count table is stored in sparse matrix format which explicitly stores only non zero values to save space.
+
+```{r}
+# How many UMIs were counted for gene IDH1 in cell TACTTCTCCGGG_COVID19_Participant25?
+GetAssayData(seurat.raw, slot = "counts")['IDH1','TACTTCTCCGGG_COVID19_Participant25']
+```
+
+```{r}
+# What metadata columns do we have available?
+print(colnames(seurat.raw@meta.data))
+```
+
+```{r}
+# How many cells come from SARSCoV2_PCR_Status = pos samples and how many cells come from SARSCoV2_PCR_Status = neg samples?
+print(table(seurat.raw$SARSCoV2_PCR_Status))
+```
+
+```{r}
+# How many cells come from sex = male samples and how many cells come from sex = female samples?
+# TODO:
+```
+
+```{r}
+# How many cells come from sex = male and SARSCoV2_PCR_Status = pos?
+print(table(seurat.raw$SARSCoV2_PCR_Status, seurat.raw$sex))
+# 1573
+```
+
+```{r}
+# What is the lowest and highest number of UMIs (= RNA Count) per cell in this data
+print(paste0("Lowest number of UMIs per cell = ", min(seurat.raw$nCount_RNA)))
+print(paste0("Highest number of UMIs per cell = ", max(seurat.raw$nCount_RNA)))
+```
+
+```{r}
+# What is the average number of UMIs (= RNA Count) per cell in this data
+print(paste0("The average number of UMIs per cell = ", mean(seurat.raw$nCount_RNA)))
+```
+
+```{r}
+# Create a violin plot showing the distribution of number of UMIs per cell
+options(repr.plot.width=7, repr.plot.height=7)
+VlnPlot(seurat.raw, features = c("nCount_RNA"))
+```
+
+```{r}
+# What is the lowest and highest number of genes per cell in this data
+# Hint: in Seurat, number of genes is stored in the nFeature_RNA metadata column
+# TODO:
+```
+
+```{r}
+# What is the average number of genes per cell in this data
+# Hint: in Seurat, number of genes is stored in the nFeature_RNA metadata column
+# TODO:
+```
+
+```{r}
+# Create a violin plot showing the distribution of number of genes per cell
+# TODO:
+```
+
+### Quality Control
+
+We've already seen two of the main QC metrics (number of UMI and number of Gene) were auto computed by Seurat
+The other major QC metric is the percentage of mitochondrial genes
+To calculate this metric we're going to use Seurat's PercentageFeatureSet method.
+PercentageFeatureSet calculates the percent of UMIs coming from genes whose name matches the 'pattern' argument.
+
+```{r}
+# Human mitochondrial gene names start with "MT-" so we'll calculate the percentage of genes matching the pattern "^MT-"
+seurat.raw[["percent.mt"]] <- PercentageFeatureSet(seurat.raw, pattern = "^MT-")
+```
+
+```{r}
+# What is the lowest and highest mitochondrial gene percent per cell in this data
+# TODO:
+```
+
+```{r}
+# What is the average mitochondrial gene percent per cell in this data
+# TODO:
+```
+
+```{r}
+# Create a violin plot showing the distribution of mitochondrial gene percent
+# TODO:
+```
+
+```{r}
+# We can visualize all three of the cell quality metrics together using Seurat's VlnPlot method
+options(repr.plot.width=12, repr.plot.height=6)
+VlnPlot(seurat.raw, features = c("nCount_RNA", "nFeature_RNA", "percent.mt"))
+```
+It is often helpful to visualize these metrics in conjunction as cells that are outliers in multiple dimensions
+are more likely to be low quality cells.
+Seurat's FeatureScatter creates a scatter plot of two given columns from our metadata.
+
+```{r}
+# Here we visualize the number of UMI vs the percentage of mito genes.
+options(repr.plot.width=6, repr.plot.height=6)
+FeatureScatter(seurat.raw, feature1 = "nCount_RNA", feature2 = "percent.mt")
+```
+
+```{r}
+# Visualize the number of UMI per cell vs the number of genes per cell
+# TODO:
+```
+It is also sometimes helpful to visualize QC metrics per sample or per celltype inorder to make ourselves aware of any
+sample specific or celltype specific biases in any filtering we might do. Normally we won't have celltype assignment at
+this stage so the process would be iterative where we might start with lenient QC filters, proceed with celltype assignment
+and go back to QC and compare the metrics across celltypes.
+
+```{r}
+
+# Here we have celltypes assigned beforehand so we will visualize the metrics per celltype
+options(repr.plot.width=18, repr.plot.height=6)
+VlnPlot(seurat.raw, features = c("nCount_RNA", "nFeature_RNA", "percent.mt"), group.by = 'Coarse_Cell_Annotations')
+```
+
+```{r}
+# Visualize the QC metrics grouped by 'donor_id'
+# TODO:
+```
+
+```{r}
+# Once we've visualized the metrics we can select the thresholds that we want to use to filter.
+# We use R's subset method to filter
+seurat.raw <- subset(
+    seurat.raw,
+    subset =
+        nFeature_RNA > 200 &
+        nCount_RNA > 400 &
+        nFeature_RNA < 6000 &
+        percent.mt < 40
+)
+```
+
+```{r}
+# After this filtering step how many cells are we left with? How many cells did this filtering remove?
+# TODO:
+```
+
+```{r}
+# What is the lowest number of UMIs, lowest number of genes per cell and highest percent mitochondrial genes now?
+# TODO:
+```
+
+```{r}
+# Visualize the QC metrics across celltype and donor again to see the post filtering distributions
+# TODO:
+```
+
+### Normalization
+
+After removing unwanted cells from the dataset, the next step is to normalize the data.
+The most common approach to normalization in Seurat a global-scaling normalization method “LogNormalize”
+that normalizes the feature expression measurements for each cell by the total expression,
+multiplies this by a scale factor (10,000 by default), and log-transforms the result.
+Normalized values are stored in seurat.raw[["RNA"]]@data.
+
+
+```{r}
+seurat.raw <- NormalizeData(seurat.raw, normalization.method = "LogNormalize", scale.factor = 10000)
+
+```
+
+We can verify that for each cell the sum of the normalized counts equals the scale factor after exponentiating 
+and subtracting the 1 pseudocount
+
+```{r}
+t(colSums(exp(seurat.raw[["RNA"]]@data) - 1)[1:3])
+```

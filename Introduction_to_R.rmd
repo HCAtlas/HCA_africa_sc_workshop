@@ -1,0 +1,381 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+
+library(Seurat)
+library(dplyr)
+library(Matrix)
+library(patchwork)
+library(stringr)
+library(ggplot2)
+```
+
+
+
+# Creating objects- Variable assignment
+```{r}
+# Assign a value to a variable to save the results
+#Explain
+x = 4 + 6
+x <- 4 + 6
+## R is case sensitive
+X <- 10
+```
+
+# View and Delete objects
+
+```{r}
+a <- 3
+b <- 10
+ls () # list objects in environment
+rm(a) #remove the object "a"
+rm(list = ls()) # Remove all objects in Environment
+```
+
+#Classes/ Data Types
+
+R is a high level programming language that works with objects characterized by their names and their content/ attributes. 
+These objects are constituted of basic types of elements which are mainly known
+as classes or data types. There are four basic class types: Integer, Numeric, Character and Logical.
+
+
+## Integer
+```{r}
+
+x <- 2 ## assign value of 2 to x
+
+class(x) ## check class of x
+
+is.integer(x) ## check if x is an integer
+
+is.numeric(x) ## check if x is numeric
+
+x <- as.numeric(x) ## assign x to be an numeric
+
+is.numeric(x) ## check if the assignment worked
+
+class(x) ## check if the assignment worked
+
+x ## check value of x
+```
+
+## Numeric- Numbers
+Numeric values are either  decimal values or integers.
+```{r}
+n <- 0.5
+n <- 10
+class(n)
+is.integer(n)
+```
+
+## Characters- input with double/ single quotes
+A character object is used to represent string values in R.
+```{r}
+mycharacter <- "Single cell is amazing"
+mycharacter2 <- 'Single cell is amazing'
+
+# The input with " can be included in the character value if it follows a backslash \
+mycharacter3 <- "Single cell \" is amazing"
+```
+
+##Logical- Boolean (true or false)
+Logical values are often created via comparison between variables.
+```{r}
+mylogical <- FALSE
+mylogical2 <- T
+#Example
+x <- 1
+y <- 4
+#Is x larger than y?
+z <- x>y
+#Print logical value
+z
+
+```
+
+# Manipulating Objects
+
+## Factors
+Seen as "Categorical variables" used when doing statistics or plots
+```{r}
+myfactor <- as.factor("male")
+```
+
+# Vectors- Collection of elements of same class
+Vectors are created using the combine function c(). Vectors can only hold data of one type. If different data types are applied in one vector, one of the type will be converted to the other.
+
+## Numeric vectors
+
+```{r}
+numeric_vector <- c(2,2,3,4,5)
+# c stands for concatenate
+# Check your environment to see if it's right: assigned name, class type, the length and the put in values
+
+```
+
+## Logical vectors
+
+```{r}
+logical_vector <- c(F,F,TRUE,FALSE,T)
+```
+
+## Character vectors
+```{r}
+character_vector <- c("x", "y", "z", "27", "10", "my name is Laura")
+```
+
+## Factor Vectors
+Same as writing a vector of character but give it "as.factors" function
+```{r}
+#Factor of 5 levels
+factor_vector <- as.factor(c("A", "B", "C", "D", "E"))
+#Factor of 3 levels
+factor_vector1 <- as.factor(c("A", "B", "B", "B", "C"))
+
+## Certain rules apply if different data types are put together in one vector
+# Logical + numerical = numerical
+# Logical + numerical + character = characters
+
+logic_num_vector <- c(1, FALSE)
+logic_num_charact_vector <- c(2, TRUE, "x")
+```
+
+## List 
+List can be anything such as vectors, another list, a data frame. This data type can hold objects of different classes and lengths.
+
+```{r}
+mylist <- list(numeric_vector, logical_vector, character_vector)
+mylist1 <- list(numeric_vector, logical_vector, character_vector, 10, list(numeric_vector, logical_vector, character_vector), mean)
+```
+
+## Data frame- List of vectors of equal lengths
+
+```{r}
+mydataframe <- data.frame(numeric_vector, logical_vector)
+## This worked because same length 
+##Try this now
+mydataframe <- data.frame(numeric_vector, logical_vector, character_vector)
+
+mydataframe2 <- data.frame(x = numeric_vector, y = logical_vector)
+```
+
+## Matrix- same as a vector with an additional dimensional attribute, defines number of rows and columns of matrix
+Matrix assign names randomly
+
+```{r}
+mymatrix <- matrix(character_vector, 2, 3)
+##matrix with 2 dimensions, 2 rows and 3 columns
+```
+
+## Indexing: Accessing the values of an object
+
+```{r}
+character_vector[1:6]
+## will give you the FIRST 6 elements
+logical_vector[c(F,F,TRUE,FALSE,T)]
+
+logical_vector[-1] #gives you all the values except the first one
+mylist3 <- list("x" = numeric_vector, "y" = logical_vector, zwithoutquotes = character_vector, list(numeric_vector, logical_vector, character_vector), mean)
+```
+
+# Functions
+
+```{r}
+how_to_create_function <- function(a,b) {
+  
+}
+
+new_function <- function(value1, value2) {
+  results <- value1 + value2
+  return(results)
+}
+## Example
+new_function(15, 20)
+
+new_function1 <- function(value1, value2) {
+  results <- value1 / value2
+  return(results)
+}
+new_function1(15,20)
+new_function1(value2 = 15, value1 = 20)
+?mean
+
+
+new_function
+```
+
+
+
+## Installing packages
+
+R is an open source language that comes with a built-in set of packages which can be run directly from your R console. The Comprehensive R Archive Network (CRAN) Packages is the biggest archive of R packages. 
+
+Packages are collection of functions and can be created by anyone. In order for a package to be released, a set of requirements has to be fullfilled by CRAN.
+
+For more information, please visit the CRAN website: (https://cran.r-project.org/)
+
+```{r}
+# To install a package
+install.packages("ggplot2")
+
+library(ggplot2) # To initialize a package
+
+library () # To see a lit of all installed packages
+
+library(help=ggplot2) # To get information on package  "ggplot2"
+
+```
+
+##Getting Help
+
+The easiest way to get help in R is using ? operator. 
+Use "?name of a function"- R will then open find information about the function from the set of installed packages.
+```{r}
+help("merge")
+?merge 
+example("merge")  #show code examples
+
+```
+
+# Reading Data in a File
+
+R uses the working directory in order to read and write files. 
+It is important to give a path to a file if it is not in the working directory. The directory names should be separated by forward slash "/" instead of a backward slash "\". 
+
+```{r}
+# Use command getwd() (get working directory) to find the directory
+getwd()
+
+##Set working directory to directory name
+setwd("C:\\Users\\s\\Desktop")
+
+#Data files such as excel files (.xlsx) can be imported to R using .csv files
+
+## read csv files
+read.csv("PATH/TO/FILENAME.csv")
+
+## Import read tsv files
+read.delim("PATH/TO/FILENAME.tsv", sep = '\t')
+```
+
+### LAB SESSIONS
+## Let's learn how to use the tools
+
+> Graphics
+
+First, make sure that you have loaded the required packages.
+
+```{r}
+library(ggplot2)
+```
+
+What is ggplot2? 
+
+The function ggplot2 is a plotting package that allows us to graph most kinds of data in a simple way. This package was designed by Hadley Wickham and provides helpful commands to create complex plots from data in a data frame.
+
+Remember, if you are not sure how the function works, get help in the interactive session by simply “?nameoffunction” → ?ggplot2
+
+If you want to learn more information about the original package, please refer to: (http://vita.had.co.nz/papers/layered-grammar.pdf)
+
+ggplot graphics are built layer by layer by adding new elements.
+
+## 1.Data
+
+First, specify which dataset you want to use
+
+```{r} 
+data()  # To view R data sets
+ggplot(diamonds)
+
+```
+
+## 2. Aesthetics- aes
+
+Once you’ve chosen your dataset, define an aesthetic mapping. In other words,  specify how you would like your axes to be represented in the plot by specifying the respective variables from the data set. This could be X and Y axis along with color, size, shape, etc…
+
+```{r}
+ggplot(diamonds, aes(x = carat, y = price))
+
+```
+Note that, no plot will be printed until you add the geom layers.
+
+## 3. Geometrics
+Also known as “geoms”, these are used to represent graphics of the data in the plot. There exist many different "geoms". The most common ones include: 
+     
+    - geom_point()    # for dot plots, scatter plots, etc.
+    - geom_line()   # for time series, trend lines, etc..
+    - geom_boxplot() # for boxplots
+The "+" operator is used to add multiple layers to a ggplot.
+
+```{r}
+# Assign plot to a variable
+diamonds_prices <- ggplot(data = diamonds,
+                       mapping = aes(x = carat, y = price))
+
+# Draw the plot
+diamonds_prices +
+    geom_point()
+
+```
+
+##Quick Example of BOD dataset
+
+```{r}
+BOD # To check description of BOD Data frame
+
+ggplot(data = BOD, 
+       mapping = aes(x = Time,
+                     y = demand)) + 
+  geom_point(size = 5)+
+  geom_line(colour = "red")
+## Try a different size 
+ggplot(BOD, aes(Time, demand))+
+  geom_point(size = 3)+
+  geom_line(colour = "red")
+
+```
+
+
+## Integrating the pipe operator %>% with ggplot2
+
+```{r}
+CO2
+CO2 %>%
+  ggplot(aes(conc, uptake,
+             colour = Treatment))+
+  geom_point(size = 3, alpha = 0.5)+
+  geom_smooth(method = lm, se = F)+
+  facet_wrap(~Type)+   
+  labs(title = "Concentration of CO2")+
+  theme_bw()
+
+# Note: faceting allows the user to split one plot into multiple plots based on a factor included in the dataset.
+```
+
+##LAB SESSIONS
+Create plot using the mpg R data set, try playing with different geom_ to make different plots
+
+```{r}
+mpg
+
+new_mpg <- ggplot(aes(displ, cty))  ## Label the axis
+
+## Add layer to add a geom
+new_mpg + geom_point()
+```
+Each geom_point layer will follow this structure. Add the "+" operator to add another layer
+
+```{r}
+geom_point(aes(gp, y)) +
+  geom_point(data = ds, aes(gp, mean), colour = 'red', size = 3)
+```
+
+Try: - geom_smooth
+    - facet_wrap
+    - decide how you want to label your title, the different axis using labs()
+    
+    
