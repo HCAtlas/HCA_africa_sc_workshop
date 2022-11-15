@@ -1,0 +1,279 @@
+---
+title: "HCA Africa scRNA-Seq workshop: HCA_covid19_clustering_lab.Rmd"
+author: "Orr Ashenberg and Sergio Triana"
+date: "11/16/2022"
+output: html_document
+---
+
+In this lab, we will study the COVID-19 scRNA-Seq datasets collected from nasopharyngeal swabs from  healthy and COVID-19 participants in the recent paper [Impaired local intrinsic immunity to SARS-CoV-2 infection in severe COVID-19](https://pubmed.ncbi.nlm.nih.gov/34352228/). We will learn about important choices in feature selection, dimensional reduction, clustering, visualization, and differentially expressed gene analysis. This lab notebook draws heavily from the [Seurat PBMC3K tutorial](https://satijalab.org/seurat/articles/pbmc3k_tutorial.html).
+
+!!!!PLEASE READ!!!!
+!!!!PLEASE READ!!!!
+You are all divided into 4 groups (Group 1, Group 2, Group 3, Group 4). The Rmarkdown chunks specific for each group are marked as ## Group 1: task1,  ## Group 2: task2, etc... Run the main chunks of the code first (marked as MAIN), and then your group specific chunk (marked as GROUP #). The group-specific Rmarkdown chunks do not need to be run to get the main results of the script.  Feel free to work through chunks for the other groups as well. 
+Please prepare to present what you learned in the Group specific task you worked on. You can present saved plots, discuss how the analysis code works, or ask questions you have! Please ask us for any help and clarification! We will have you present these as a group for 5 minutes each. Thank you!
+
+!!!!PLEASE READ!!!!
+!!!!PLEASE READ!!!!
+Remember to update scw01 to match your personal user directory! You received this user directory earlier, and you can also find it by opening the R terminal.
+results.dir <- "/home1/scw01/"
+
+## MAIN: Load libraries, set user directory paths, and read data into a Seurat object. 
+```{r}
+library(Seurat) 
+library(dplyr)
+library(ggplot2)
+options(bitmapType='cairo')
+
+# Set directory for where to read data and to write results.
+# Remember to update scw01 to match your personal user directory!
+results.dir <- "/home1/scw01/"
+
+# Create Seurat object containing gene expression counts and cell metadata.
+counts <- readRDS(paste0(results.dir, "/20210220_NasalSwab_RawCounts_filtered.rds"))
+metadata <- readRDS(paste0(results.dir, "/20210701_NasalSwab_MetaData_filtered.rds"))
+gcdata <- CreateSeuratObject(counts = counts, project = "covid19", meta.data = metadata, min.cells = 0, min.features = 0)
+
+# Add metadata to indicate whether a single cell is from a control patient or a COVID-19 patient.
+gcdata[["status"]] <- sapply(strsplit(as.character(gcdata$donor_id), "_"), function(x) x[[1]])
+print(gcdata[[c("status", "donor_id")]])
+```
+
+## MAIN: Selecting highly variable features
+Here we identify highly variable features (ie genes) that best describe the variability in our single cell transcriptomic data. This is an important choice as these genes are used for dimensional reduction and clustering.
+```{r MAIN_feature_selection}
+# First, normalize gene expression data for sequencing depth, and log transform it.
+# Why do we normalize the data?
+gcdata <- NormalizeData(gcdata, normalization.method = "LogNormalize", scale.factor = 10000)
+
+# Second, identify highly variable genes (ie features). You can read about the selection method
+# by typing ?FindVariableFeatures and scrolling down to selection.method. 
+gcdata <- FindVariableFeatures(gcdata, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes and plot them.
+top20 <- head(VariableFeatures(gcdata), 20)
+plot <- VariableFeaturePlot(gcdata)
+LabelPoints(plot = plot, points = top20, repel = TRUE)
+```
+
+## MAIN: Dimensionality reduction using PCA
+Single-cell transcriptomic data exists in very high dimensions, as 20K genes are measured per cell in human studies. It is difficult to work with such data, and the sparsity of the data as well as genetic co-regulation provide strong rationale to move into a lower dimension space. PCA (Principal component analysis) is the most popular method to reduce the dimensionality of the data. By choosing a number of principal components (PCs) smaller than the number of measured genes, we reduce the dimensionality of the data!
+```{r MAIN_pca}
+# Mean center and scale the expression of each gene.
+gcdata <- ScaleData(gcdata, features = VariableFeatures(gcdata), do.scale = T, do.center = T)
+
+# Run PCA dimensionality reduction.
+gcdata <- RunPCA(gcdata, features = VariableFeatures(gcdata))
+```
+
+## MAIN: Clustering to identify cell subsets
+Now that we have reduced the dimensionality of the data, we can perform clustering of the single cells. The clustering involves construction of a nearest-neighbor graph, where distances between cells are calculated in the PCA space. After clustering, we can visualize the clustered cells in a UMAP embedding.
+```{r MAIN_clustering}
+# Build shared nearest neighbors graph and do clustering on this graph.
+gcdata <- FindNeighbors(gcdata, dims = 1:20, k.param = 20)
+gcdata <- FindClusters(gcdata, resolution = 0.8)
+
+# Create a UMAP embedding (a non-linear dimensional reduction technique).
+gcdata <- RunUMAP(gcdata, dims = 1:20, reduction = "pca", seed.use = 1)  
+
+# Visualize cell subsets, labeled by cell cluster number, mapped onto the UMAP embedding.
+# DimPlot lets us view the UMAP. Here we label cells using seurat_clusters.
+DimPlot(gcdata, reduction = "umap", label = T)
+ggsave(paste0(results.dir, "/umap_subsets.png"), width = 6, height = 6)
+
+# Visualize cell subsets, labeled by cell type annotation from paper authors.
+# DimPlot lets us view the UMAP. Here we label cells using Coarse_Cell_Annotations.
+DimPlot(gcdata, reduction = "umap", group.by = "Coarse_Cell_Annotations", label = T)
+ggsave(paste0(results.dir, "/umap_annotations.png"), width = 9, height = 6)
+
+# Visualize cell subsets, labeled by COVID-19 status.
+DimPlot(gcdata, reduction = "umap", group.by = "status", label = T)
+ggsave(paste0(results.dir, "/umap_status.png"), width = 6, height = 6)
+
+# Visualize cells, colored with the amount of detected SARS-CoV-2 RNA.
+gcdata$SARSCoV2_Total_Corrected <- as.integer(gcdata$SARSCoV2_Total_Corrected)  # convert values to integers
+FeaturePlot(gcdata, "SARSCoV2_Total_Corrected", reduction = "umap", max.cutoff = 20, pt.size = 1)
+ggsave(paste0(results.dir, "/umap_virus.png"), width = 6, height = 6)
+```
+
+## MAIN: Identify the genes differentially expressed by each cell subset
+By looking at genes that are differentially expressed in one cell subset relative to all other cell subsets, we can identify the cell type or cell state corresponding to that cell subset. For example, the CD3 gene is differentially expressed in T cells, relative to all other cells, and is an important gene for a T cell's function. Overall, identifying the cell types and states tells us about the composition of the tissue, and allows us to ask focused questions on what transcriptional programs define a specific cell type.
+```{r MAIN_DE_genes}
+# Select which differential expression (DE) test to use in Seurat. We will use the wilcox test.
+# Look at the documentation of FindAllMarkers (type ?FindAllMarkers in Console) to better understand 
+# the differences in these DE tests.
+tests <- c("wilcox", "t", "roc", "MAST", "bimod")
+test <- tests[1]  # choose wilcox test
+
+# Find differentially expressed genes for each cell subset. Cell subset information is stored 
+# in the seurat_clusters column of the metadata found in gcdata[[]].
+Idents(gcdata) <- "seurat_clusters"  # set the default cell identities to the cluster numbers.
+gcdata.markers <- FindAllMarkers(gcdata, min.pct = 0.1, logfc.threshold = 0.5, max.cells.per.ident = 200, test.use = test, return.thresh = 0.1 / nrow(gcdata), verbose = T)
+
+# It is often helpful to visualize a gene's expression after the expression has been scaled.
+# We will scale the data here, and then make a heat map showing scaled gene expression.
+# We use code from the dplyr package to find the top 10 genes for each cluster based on avg_log2FC.
+top10genes <- gcdata.markers %>% filter(avg_log2FC > 0) %>% group_by(cluster) %>% top_n(10, avg_log2FC)
+genes <- top10genes$gene
+gcdata <- ScaleData(gcdata, features = genes, do.center = T, do.scale = F)
+
+# Now that the data is scaled, we visualize the expression of the top DE genes for each cell subset. 
+DoHeatmap(gcdata, features = genes) + scale_fill_distiller(palette = "RdYlBu")
+ggsave(paste0(results.dir, "/DE_genes_heatmap_cellsubsets.png"), width = 20, height = 15)
+# Look at the genes and see if you recognize any that can help in identifying cell types or states.
+
+# Find differentially expressed genes for each annotated cell subset (provided by the paper authors).
+# We will only measure DE genes for those annotated cell subsets containing at least 100 cells, to focus
+# on the larger cell subsets. To only loop at the larger cell subsets, we can subset the original 
+# Seurat object (gcdata) to a new Seurat object named gcdata.sub.
+Idents(gcdata) <- "Coarse_Cell_Annotations"  # use annotations from paper
+gcdata.sub <- subset(gcdata, idents = c(names(which(table(gcdata$Coarse_Cell_Annotations) >= 100))))
+gcdata.markers <- FindAllMarkers(gcdata.sub, min.pct = 0.1, logfc.threshold = 0.5, max.cells.per.ident = 200, test.use = test, return.thresh = 0.1 / nrow(gcdata.sub), verbose = T)
+
+# Visualize the expression of the top DE genes for each annotated cell subset. 
+top10genes <- gcdata.markers %>% filter(avg_log2FC > 0) %>% group_by(cluster) %>% top_n(10, avg_log2FC)
+genes <- top10genes$gene
+gcdata.sub <- ScaleData(gcdata.sub, features = genes, do.center = T, do.scale = F)
+DoHeatmap(gcdata.sub, features = genes) + scale_fill_distiller(palette = "RdYlBu")
+ggsave(paste0(results.dir, "/DE_genes_heatmap_annotated_cellsubsets.png"), width = 12, height = 9)
+
+# Examine the DE genes you just identified for each annotated cell subset. Do they make sense to you?
+# Consult the original paper. A useful website for looking up gene function is https://www.genecards.org/.
+```
+
+## GROUP 1: Interpreting the principal components from PCA analysis
+What biological information is found in the principal components, and how many principal components should we use to describe our transcriptomic data? The principal components can indicate which genes are important in different cell subsets, and we use them for clustering of the cells to identify cell subsets above. 
+```{r GROUP1_PCA_analysis}
+# First, let us rerun the PCA analysis.
+# Mean center and scale the expression of each gene, and run PCA dimensionality reduction.
+gcdata <- ScaleData(gcdata, features = VariableFeatures(gcdata), do.scale = T, do.center = T)
+gcdata <- RunPCA(gcdata, features = VariableFeatures(gcdata))
+
+# First we can look at a PC plot where we plot for each cell its PC1 score vs PC2 score. 
+# Try PC 1 vs 2, PC 3 vs 4, etc....
+DimPlot(gcdata, dims = c(1, 2), reduction = "pca")
+ggsave(paste0(results.dir, "/PCA_plot.png"), width = 6, height = 6)
+
+# Next we can print out the genes with the most positive and negative loadings for each principal component.
+print(gcdata[["pca"]], dims = 1:5, nfeatures = 5)
+
+# Here is another way to visualize the PC loadings.
+VizDimLoadings(gcdata, dims = 1:2, reduction = "pca", balanced = T)
+
+# Heatmaps are yet another way to visualize the PC loadings.
+DimHeatmap(gcdata, dims = 1:12, cells = 500, balanced = TRUE)
+ggsave(paste0(results.dir, "/PCA_heatmap.png"), width = 6, height = 6)
+# After how many PCs do you start to see a lack of separation in the cells?
+
+# Elbow plots are another way to help decide how many principal components to study. 
+# You can read more about PCA plots here, 
+# https://bioturing.medium.com/how-to-read-pca-biplots-and-scree-plots-186246aae063
+ElbowPlot(gcdata, ndims = 25, reduction = "pca")
+ggsave(paste0(results.dir, "/PCA_elbow.png"), width = 6, height = 6)
+```
+
+## GROUP 2: How do parameter choices affect results from clustering and visualization?
+We will see how changing the parameters used in the clustering and in the visualization algorithms affect our results. 
+```{r GROUP2_visualization}
+# For these computational experiments, we will focus on the cell subset annotations provided in the paper.
+Idents(gcdata) <- "Coarse_Cell_Annotations"
+
+# What happens as k in the nearest neighbor graph construction (k.param) becomes very small or large?
+# Try a range of k.param from 2-100 and save your plot images.
+gcdata <- FindNeighbors(gcdata, dims = 1:20, k.param = 20)
+gcdata <- FindClusters(gcdata, resolution = 0.8)
+DimPlot(gcdata, reduction = "umap", label = T)
+ggsave(paste0(results.dir, "/umap_subsets_k20.png"), width = 6, height = 6)
+
+# What happens as the resolution in the clustering algorithm becomes very small or large?
+# Try a range of resolution parameters from 0.1 to 3.0 and save your plot images.
+gcdata <- FindNeighbors(gcdata, dims = 1:20, k.param = 20)
+gcdata <- FindClusters(gcdata, resolution = 0.8)
+DimPlot(gcdata, reduction = "umap", label = T)
+ggsave(paste0(results.dir, "/umap_resolution_08.png"), width = 6, height = 6)
+
+# How does our data look when using alternatives to the UMAP embedding visualization?
+# To learn more about tSNE and UMAP, check out https://pair-code.github.io/understanding-umap/
+# First, try changing some of the UMAP parameters.
+gcdata <- RunUMAP(gcdata, dims = 1:20, reduction = "pca", n.neighbors = 15, min.dist = 0.5, spread = 1, metric = "euclidean", seed.use = 1)  
+DimPlot(gcdata, reduction = "umap", label = T)
+
+# Now, calculate the tSNE embedding. The main parameter we alter is the perplexity.
+# Try a range of perplexity parameters from 1-100. Also visit 
+# https://pair-code.github.io/understanding-umap/ for further explanation.
+gcdata <- RunTSNE(gcdata, dims = 1:20, perplexity = 30)
+DimPlot(gcdata, reduction = "tsne", label = T)
+ggsave(paste0(results.dir, "/tsne_perplexity_30.png"), width = 6, height = 6)
+```
+
+## GROUP 3: Batch effects
+For every single cell transcriptomic data set, it is important to ask whether there are any technical, batch effects. Without accounting for these batch effects, we may be misled in our biological conclusions. Batch effects arise from sources of variation we typically do not want to study, such as experiments done on separate days or using different sequencing platforms. They may also result from confounding biological sources of variation. For example if we are studying disease effects, and all individuals in the disease population are of male sex and all individuals in the control population are of female sex, then we cannot separate the effect of the disease from the effect of the differences in sex.
+```{r GROUP3_batch_effect}
+# Examine the types of metadata collected in the COVID-19 study. 
+# What sources of variation do you think may contribute to potential batch effects?
+head(gcdata[[]])
+
+# One of the first batch effects we always look for are individual-specific effects.
+# Are there cell types or states only found within a single individual, or a specific population?
+p1 <- DimPlot(gcdata, reduction = "umap", group.by = "Coarse_Cell_Annotations", label = T)
+p2 <- DimPlot(gcdata, reduction = "umap", group.by = "donor_id", label = T)
+p1 + p2
+ggsave(paste0(results.dir, "/umap_annotation_donors.png"), width = 15, height = 6)
+
+# The above is a bit difficult to look at. Let us try another visualization.
+# We can subset the UMAP embedding to have each panel only show cells from a single individual.
+DimPlot(gcdata, reduction = "umap", split.by = "donor_id", label = F)
+ggsave(paste0(results.dir, "/umap_donors.png"), width = 24, height = 6)
+# How much variability is there within the control patients and within the COVID-19 patients?
+# Are there cell types or states specific to one group or another?
+
+# Now let us look at potential batch effects due to the sex of the study individuals.
+# Describe what similarities and differences you see.
+DimPlot(gcdata, reduction = "umap", split.by = "sex", label = F)
+ggsave(paste0(results.dir, "/umap_donors_sex.png"), width = 15, height = 6)
+
+# Finally, look at differences in COVID-19 disease and control patients.
+# Describe what similarities and differences you see.
+p1 <- DimPlot(gcdata, reduction = "umap", group.by = "Coarse_Cell_Annotations", label = T)
+p2 <- DimPlot(gcdata, reduction = "umap", group.by = "status", label = T)
+p1 + p2
+ggsave(paste0(results.dir, "/umap_donors_status.png"), width = 15, height = 6)
+```
+
+## GROUP 4: Gene expression programs within COVID-19 patients
+Now that we have identified the cell subsets, we can ask for each cell subset what genes are differentially expressed between the COVID-19 patient tissue samples and control patient samples. This provides an initial, biological understanding of the cellular transcriptional programs induced by COVID-19.
+```{r GROUP4_DE_status}
+# First identify all the annotated cell subsets, and how many cells are found within each subset.
+table(gcdata$Coarse_Cell_Annotations)
+
+# Within ciliated cells, compare gene expression from COVID-19 patients to gene expression 
+# from control patients. We focus on "Ciliated Cells" using the subset.ident argument in FindMarkers.
+Idents(gcdata) <- "Coarse_Cell_Annotations"
+gcdata.markers <- FindMarkers(gcdata, ident.1 = "COVID19", group.by = "status", max.cells.per.ident = 200, subset.ident = "Ciliated Cells")
+
+# From the DE gene data frame, identify those genes that are the most differentially expressed.
+top10genes <- gcdata.markers %>% filter(p_val_adj < 0.1) %>% slice_max(n = 10, avg_log2FC)
+bottom10genes <- gcdata.markers %>% filter(p_val_adj < 0.1) %>% slice_min(n = 10, avg_log2FC)
+print(top10genes)
+print(bottom10genes)
+
+# Visualize the expression of the DE genes. We scale the gene expression as we did in the main section.
+genes <- c(rownames(top10genes), rownames(bottom10genes))
+gcdata <- ScaleData(gcdata, features = genes, do.center = T, do.scale = F)
+DoHeatmap(gcdata, features = genes, group.by = "status") + scale_fill_distiller(palette = "RdYlBu")
+ggsave(paste0(results.dir, "/DE_genes_ciliated_cells_heatmap.png"), width = 9, height = 6)
+
+# What genes have increased in expression and what genes have decreased in expression? 
+# Consult the original paper. A useful website for looking up gene function is https://www.genecards.org/.
+
+# Try repeating the above analysis for different cell subsets (which you can identify using 
+# table(gcdata$Coarse_Cell_Annotations)) and saving your results as gene expression heat maps.
+Idents(gcdata) <- "Coarse_Cell_Annotations"
+gcdata.markers <- FindMarkers(gcdata, ident.1 = "COVID19", group.by = "status", max.cells.per.ident = 250, subset.ident = "Ciliated Cells")
+```
+
+## Optional: save the final Seurat object
+We can save our work in the RData format and load it again later on.
+```{r save}
+# Save current progress.
+save(gcdata, gcdata.markers, file = paste0(results.dir, "/seurat_object_covid19.Rda"))
+```
